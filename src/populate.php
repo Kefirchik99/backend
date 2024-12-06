@@ -1,39 +1,69 @@
 <?php
- 
-require_once __DIR__ . '/../../vendor/autoload.php';
+
+namespace App\Models;
 
 use App\Config\Database;
-use App\Models\Category;
-use App\Models\Product;
-use App\Models\Attribute;
 
-// Establish database connection
+
+require_once __DIR__ . '/../config/Database.php';
+
+// Connect to the database
 $pdo = Database::connect();
 
-// Read JSON data
-$jsonData = file_get_contents(__DIR__ . '/../data/data.json');
+// Read the JSON file
+$jsonFilePath = __DIR__ . '/../data/data.json';
+$jsonData = file_get_contents($jsonFilePath);
 $data = json_decode($jsonData, true);
 
 if (!$data) {
-    die("Error decoding JSON data.");
+    die("Failed to parse JSON file.\n");
 }
 
 // Insert categories
-$categoryModel = new Category($pdo);
 foreach ($data['categories'] as $category) {
-    $categoryModel->insert($category);
+    $stmt = $pdo->prepare("INSERT INTO categories (id, name) VALUES (:id, :name)");
+    $stmt->execute([
+        'id' => $category['id'],
+        'name' => $category['name']
+    ]);
 }
+echo "Categories inserted successfully.\n";
 
 // Insert attributes
-$attributeModel = new Attribute($pdo);
 foreach ($data['attributes'] as $attribute) {
-    $attributeModel->insert($attribute);
+    $stmt = $pdo->prepare("INSERT INTO attributes (id, name) VALUES (:id, :name)");
+    $stmt->execute([
+        'id' => $attribute['id'],
+        'name' => $attribute['name']
+    ]);
 }
+echo "Attributes inserted successfully.\n";
 
-// Insert products
-$productModel = new Product($pdo);
+// Insert products and their attributes
 foreach ($data['products'] as $product) {
-    $productModel->insert($product);
-}
+    $stmt = $pdo->prepare("
+        INSERT INTO products (id, name, sku, price, category_id)
+        VALUES (:id, :name, :sku, :price, :category_id)
+    ");
+    $stmt->execute([
+        'id' => $product['id'],
+        'name' => $product['name'],
+        'sku' => $product['sku'],
+        'price' => $product['price'],
+        'category_id' => $product['category_id']
+    ]);
 
-echo "Data successfully inserted!";
+    // Insert product attributes
+    foreach ($product['attributes'] as $attribute) {
+        $stmt = $pdo->prepare("
+            INSERT INTO product_attributes (product_id, attribute_id, value)
+            VALUES (:product_id, :attribute_id, :value)
+        ");
+        $stmt->execute([
+            'product_id' => $product['id'],
+            'attribute_id' => $attribute['attribute_id'],
+            'value' => $attribute['value']
+        ]);
+    }
+}
+echo "Products and product attributes inserted successfully.\n";
