@@ -1,13 +1,44 @@
 <?php
 
-namespace App\Models;
+namespace Yaro\EcommerceProject\Models;
 
-class Attribute extends Model
+use Yaro\EcommerceProject\Config\Database;
+use PDOException;
+
+abstract class Attribute extends Model
 {
-    public function insert(array $data)
+    protected static string $table = 'attributes';
+
+    protected string $name;
+    protected int $productId;
+
+    public function __construct(string $name, int $productId)
     {
-        $stmt = $this->pdo->prepare("INSERT INTO attributes (name) VALUES (:name)");
-        $stmt->execute(['name' => $data['name']]);
+        $this->name = $name;
+        $this->productId = $productId;
+    }
+
+    abstract public function save(): void;
+
+    public function getId(): ?int
+    {
+        return $this->fetchColumn("
+            SELECT id FROM " . static::$table . " WHERE name = :name AND product_id = :productId
+        ", [
+            'name' => $this->name,
+            'productId' => $this->productId,
+        ]);
+    }
+
+    public function saveItem(string $displayValue, string $value): void
+    {
+        $this->executeQuery("
+            INSERT INTO attribute_items (attribute_id, display_value, value)
+            VALUES (:attribute_id, :display_value, :value)
+        ", [
+            'attribute_id' => $this->getId(),
+            'display_value' => $displayValue,
+            'value' => $value,
+        ]);
     }
 }
-
