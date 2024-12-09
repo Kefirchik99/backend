@@ -26,10 +26,12 @@ class Product extends Model
 
     public function save(): void
     {
-        $this->executeQuery("
-            INSERT INTO " . static::$table . " (name, description, brand, category_id, in_stock)
-            VALUES (:name, :description, :brand, :category_id, :in_stock)
-        ", [
+        $db = Database::getConnection();
+        $query = "INSERT INTO " . static::$table . " (name, description, brand, category_id, in_stock)
+                  VALUES (:name, :description, :brand, :category_id, :in_stock)
+                  ON DUPLICATE KEY UPDATE description = :description, brand = :brand, in_stock = :in_stock";
+        $stmt = $db->prepare($query);
+        $stmt->execute([
             'name' => $this->name,
             'description' => $this->description,
             'brand' => $this->brand,
@@ -40,31 +42,30 @@ class Product extends Model
 
     public function getId(): ?int
     {
-        return $this->fetchColumn("
-            SELECT id FROM " . static::$table . " WHERE name = :name AND category_id = :category_id
-        ", [
+        $db = Database::getConnection();
+        $stmt = $db->prepare("SELECT id FROM " . static::$table . " WHERE name = :name AND category_id = :category_id");
+        $stmt->execute([
             'name' => $this->name,
             'category_id' => $this->categoryId,
         ]);
+
+        $id = $stmt->fetchColumn();
+        return $id !== false ? (int)$id : null;
     }
 
     public function saveGalleryImage(string $imageUrl): void
     {
-        $this->executeQuery("
-            INSERT INTO gallery (product_id, image_url)
-            VALUES (:product_id, :image_url)
-        ", [
-            'product_id' => $this->getId(),
-            'image_url' => $imageUrl,
-        ]);
+        $db = Database::getConnection();
+        $stmt = $db->prepare("INSERT INTO gallery (product_id, image_url) VALUES (:product_id, :image_url)");
+        $stmt->execute(['product_id' => $this->getId(), 'image_url' => $imageUrl]);
     }
 
     public function savePrice(string $currency, string $symbol, float $amount): void
     {
-        $this->executeQuery("
-            INSERT INTO prices (product_id, currency, symbol, amount)
-            VALUES (:product_id, :currency, :symbol, :amount)
-        ", [
+        $db = Database::getConnection();
+        $stmt = $db->prepare("INSERT INTO prices (product_id, currency, symbol, amount)
+                              VALUES (:product_id, :currency, :symbol, :amount)");
+        $stmt->execute([
             'product_id' => $this->getId(),
             'currency' => $currency,
             'symbol' => $symbol,

@@ -9,12 +9,16 @@ use Yaro\EcommerceProject\Utils\DatabaseSeeder;
 
 try {
     // Load JSON data
-    $data = JsonLoader::load(__DIR__ . '/../data/data.json');
+    $dataFile = realpath(__DIR__ . '/../data/data.json');
+    if (!$dataFile) {
+        throw new \Exception("Data file not found.");
+    }
+    $data = JsonLoader::load($dataFile);
 
     // Seed the database
-    DatabaseSeeder::seed($data);
+    DatabaseSeeder::seed($data['data']);
 
     echo "Database populated successfully.\n";
 } catch (\Exception $e) {
-    die("Error: " . $e->getMessage() . "\n");
+    die("Error during database seeding: " . $e->getMessage() . "\n");
 }

@@ -11,21 +11,11 @@ class Category extends Model
 
     private string $name;
 
-    /**
-     * Category constructor.
-     *
-     * @param string $name The name of the category.
-     */
     public function __construct(string $name)
     {
         $this->name = $name;
     }
 
-    /**
-     * Save the category to the database.
-     *
-     * @return void
-     */
     public function save(): void
     {
         try {
@@ -38,11 +28,6 @@ class Category extends Model
         }
     }
 
-    /**
-     * Retrieve the ID of the category.
-     *
-     * @return int|null The ID of the category, or null if not found.
-     */
     public function getId(): ?int
     {
         $db = Database::getConnection();
@@ -52,5 +37,13 @@ class Category extends Model
         $id = $stmt->fetchColumn();
 
         return $id !== false ? (int)$id : null;
+    }
+
+    public static function findByName(string $name): ?array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare("SELECT * FROM " . static::$table . " WHERE name = :name");
+        $stmt->execute(['name' => $name]);
+        return $stmt->fetch(\PDO::FETCH_ASSOC) ?: null;
     }
 }
