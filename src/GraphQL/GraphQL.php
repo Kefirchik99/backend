@@ -7,7 +7,11 @@ use GraphQL\Type\Definition\ObjectType;
 use GraphQL\Type\Definition\Type;
 use GraphQL\Type\Schema;
 use GraphQL\Type\SchemaConfig;
-use Yaro\EcommerceProject\Config\Database;
+use Yaro\EcommerceProject\GraphQL\Resolvers\ProductResolver;
+use Yaro\EcommerceProject\GraphQL\Resolvers\CategoryResolver;
+use Yaro\EcommerceProject\GraphQL\Resolvers\AttributeResolver;
+use Yaro\EcommerceProject\GraphQL\Resolvers\PriceResolver;
+use Yaro\EcommerceProject\GraphQL\Resolvers\OrderResolver;
 use Throwable;
 
 class GraphQL
@@ -17,6 +21,13 @@ class GraphQL
         try {
             // Log request
             file_put_contents('/tmp/graphql.log', "Request received: " . date('Y-m-d H:i:s') . PHP_EOL, FILE_APPEND);
+
+            // Create resolvers
+            $categoryResolver = new CategoryResolver();
+            $attributeResolver = new AttributeResolver();
+            $priceResolver = new PriceResolver();
+            $orderResolver = new OrderResolver();
+            $productResolver = new ProductResolver($categoryResolver, $attributeResolver, $priceResolver);
 
             // Define Category type
             $categoryType = new ObjectType([
@@ -36,6 +47,16 @@ class GraphQL
                 ],
             ]);
 
+            // Define Price type
+            $priceType = new ObjectType([
+                'name' => 'Price',
+                'fields' => [
+                    'currency' => ['type' => Type::nonNull(Type::string())],
+                    'symbol' => ['type' => Type::string()],
+                    'amount' => ['type' => Type::nonNull(Type::float())],
+                ],
+            ]);
+
             // Define Product type
             $productType = new ObjectType([
                 'name' => 'Product',
@@ -44,40 +65,16 @@ class GraphQL
                     'name' => ['type' => Type::nonNull(Type::string())],
                     'description' => ['type' => Type::string()],
                     'brand' => ['type' => Type::string()],
-                    'price' => ['type' => Type::float()],
-                    'category' => [
-                        'type' => $categoryType,
-                        'resolve' => function ($product) {
-                            $db = Database::getConnection();
-                            $stmt = $db->prepare("SELECT * FROM categories WHERE id = :id");
-                            $stmt->execute(['id' => $product['category_id']]);
-                            return $stmt->fetch();
-                        },
+                    'gallery' => [
+                        'type' => Type::listOf(Type::string()),
+                        'resolve' => fn($product) => $productResolver->resolveGallery($product['id']),
                     ],
-                    'attributes' => [
-                        'type' => Type::listOf($attributeType),
-                        'resolve' => function ($product) {
-                            $db = Database::getConnection();
-                            $textAttributes = $db->prepare("SELECT * FROM text_attributes WHERE product_id = :product_id");
-                            $textAttributes->execute(['product_id' => $product['id']]);
-                            $swatchAttributes = $db->prepare("SELECT * FROM swatch_attributes WHERE product_id = :product_id");
-                            $swatchAttributes->execute(['product_id' => $product['id']]);
-
-                            $attributes = [];
-                            foreach ($textAttributes->fetchAll() as $attr) {
-                                $items = $db->prepare("SELECT value FROM text_attribute_items WHERE attribute_id = :id");
-                                $items->execute(['id' => $attr['id']]);
-                                $attributes[] = ['name' => $attr['name'], 'items' => $items->fetchAll(\PDO::FETCH_COLUMN)];
-                            }
-                            foreach ($swatchAttributes->fetchAll() as $attr) {
-                                $items = $db->prepare("SELECT value FROM swatch_attribute_items WHERE attribute_id = :id");
-                                $items->execute(['id' => $attr['id']]);
-                                $attributes[] = ['name' => $attr['name'], 'items' => $items->fetchAll(\PDO::FETCH_COLUMN)];
-                            }
-
-                            return $attributes;
-                        },
+                    'prices' => [
+                        'type' => Type::listOf($priceType),
+                        'resolve' => fn($product) => $priceResolver->resolvePrices($product['id']),
                     ],
+                    'category' => ['type' => $categoryType],
+                    'attributes' => ['type' => Type::listOf($attributeType)],
                 ],
             ]);
 
@@ -87,22 +84,16 @@ class GraphQL
                 'fields' => [
                     'categories' => [
                         'type' => Type::listOf($categoryType),
-                        'resolve' => function () {
-                            $db = Database::getConnection();
-                            return $db->query("SELECT * FROM categories")->fetchAll();
-                        },
+                        'resolve' => fn() => $categoryResolver->resolveAll(),
                     ],
                     'products' => [
                         'type' => Type::listOf($productType),
-                        'resolve' => function () {
-                            $db = Database::getConnection();
-                            return $db->query("SELECT * FROM products")->fetchAll();
-                        },
+                        'resolve' => fn() => $productResolver->resolveAll(),
                     ],
                 ],
             ]);
 
-            // Define Mutation type for orders
+            // Define Mutation type
             $mutationType = new ObjectType([
                 'name' => 'Mutation',
                 'fields' => [
@@ -112,30 +103,7 @@ class GraphQL
                             'productId' => ['type' => Type::nonNull(Type::int())],
                             'quantity' => ['type' => Type::nonNull(Type::int())],
                         ],
-                        'resolve' => function ($root, $args) {
-                            $db = Database::getConnection();
-                            $stmt = $db->prepare("SELECT * FROM products WHERE id = :id");
-                            $stmt->execute(['id' => $args['productId']]);
-                            $product = $stmt->fetch();
-
-                            if (!$product) {
-                                throw new RuntimeException("Product not found");
-                            }
-
-                            if (!isset($product['price'])) {
-                                throw new RuntimeException("Price information is missing for the selected product.");
-                            }
-
-                            $total = $product['price'] * $args['quantity'];
-                            $stmt = $db->prepare("INSERT INTO orders (product_id, quantity, total) VALUES (:product_id, :quantity, :total)");
-                            $stmt->execute([
-                                'product_id' => $args['productId'],
-                                'quantity' => $args['quantity'],
-                                'total' => $total,
-                            ]);
-
-                            return "Order created successfully!";
-                        },
+                        'resolve' => fn($root, $args) => $orderResolver->createOrder($args['productId'], $args['quantity']),
                     ],
                 ],
             ]);
@@ -150,7 +118,7 @@ class GraphQL
             // Process request
             $rawInput = file_get_contents('php://input');
             if ($rawInput === false) {
-                throw new RuntimeException('Failed to get php://input');
+                throw new \RuntimeException('Failed to get php://input');
             }
 
             $input = json_decode($rawInput, true);
@@ -159,7 +127,6 @@ class GraphQL
 
             $result = GraphQLBase::executeQuery($schema, $query, null, null, $variableValues);
             $output = $result->toArray();
-
         } catch (Throwable $e) {
             $output = [
                 'error' => [
