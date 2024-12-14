@@ -43,9 +43,12 @@ class GraphQL
                 'name' => 'Attribute',
                 'fields' => [
                     'name' => ['type' => Type::nonNull(Type::string())],
+                    'value' => ['type' => Type::string()], // Add this field
+                    'type' => ['type' => Type::string()],  // Add this field
                     'items' => ['type' => Type::listOf(Type::string())],
                 ],
             ]);
+            
 
             // Define Price type
             $priceType = new ObjectType([

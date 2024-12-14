@@ -2,96 +2,107 @@
 
 namespace Yaro\EcommerceProject\Utils;
 
-use Yaro\EcommerceProject\Models\Category;
-use Yaro\EcommerceProject\Models\Product;
-use Yaro\EcommerceProject\Models\TextAttribute;
-use Yaro\EcommerceProject\Models\SwatchAttribute;
+use Yaro\EcommerceProject\Config\Database;
 
 class DatabaseSeeder
 {
     public static function seed(array $data): void
     {
-        if (!isset($data['categories']) || !isset($data['products'])) {
-            throw new \Exception("Invalid JSON structure. Expected 'categories' and 'products' keys.");
-        }
+        $db = Database::getConnection();
+        echo "Starting database seeding...\n";
 
-        // Insert categories
-        foreach ($data['categories'] as $categoryData) {
-            if (Category::findByName($categoryData['name'])) {
-                echo "Category already exists: " . $categoryData['name'] . "\n";
-                continue;
-            }
-            $category = new Category($categoryData['name']);
-            $category->save();
-            echo "Category saved: " . $categoryData['name'] . "\n";
-        }
+        // Handle categories
+        if (!empty($data['categories'])) {
+            echo "Processing categories...\n";
+            foreach ($data['categories'] as $category) {
+                try {
+                    if (empty($category['name'])) {
+                        echo "Skipping category: Missing name.\n";
+                        continue;
+                    }
 
-        // Insert products
-        foreach ($data['products'] as $productData) {
-            $category = Category::findByName($productData['category']);
-            if (!$category) {
-                throw new \Exception("Category not found: " . $productData['category']);
-            }
-            $categoryId = $category['id'];
-
-            $product = new Product(
-                $productData['name'],
-                $productData['description'] ?? '',
-                $productData['brand'] ?? '',
-                $categoryId,
-                $productData['inStock']
-            );
-            $product->save();
-            echo "Product saved: " . $productData['name'] . "\n";
-
-            // Insert attributes
-            foreach ($productData['attributes'] as $attributeData) {
-                if ($attributeData['type'] === 'text') {
-                    self::saveTextAttribute($product, $attributeData);
-                } elseif ($attributeData['type'] === 'swatch') {
-                    self::saveSwatchAttribute($product, $attributeData);
+                    $stmt = $db->prepare("INSERT IGNORE INTO categories (name) VALUES (:name)");
+                    $stmt->execute(['name' => $category['name']]);
+                    echo "Inserted category: {$category['name']}\n";
+                } catch (\PDOException $e) {
+                    echo "Error inserting category: {$e->getMessage()}\n";
                 }
             }
+        } else {
+            echo "No categories found in data.\n";
+        }
 
-            // Insert gallery
-            foreach ($productData['gallery'] as $imageUrl) {
-                $product->saveGalleryImage($imageUrl);
-                echo "Gallery image saved: " . $imageUrl . "\n";
+        // Handle products
+        if (!empty($data['products'])) {
+            echo "Processing products...\n";
+            foreach ($data['products'] as $product) {
+                try {
+                    if (empty($product['id']) || empty($product['name'])) {
+                        echo "Skipping product: Missing ID or name.\n";
+                        continue;
+                    }
+
+                    // Insert product
+                    $stmt = $db->prepare("
+                        INSERT IGNORE INTO products (id, name, description, brand, price)
+                        VALUES (:id, :name, :description, :brand, :price)
+                    ");
+                    $stmt->execute([
+                        'id' => $product['id'],
+                        'name' => $product['name'],
+                        'description' => $product['description'] ?? '',
+                        'brand' => $product['brand'] ?? null,
+                        'price' => $product['prices'][0]['amount'] ?? null,
+                    ]);
+                    echo "Inserted product: {$product['name']} (ID: {$product['id']})\n";
+
+                    // Insert gallery
+                    if (!empty($product['gallery'])) {
+                        foreach ($product['gallery'] as $imageUrl) {
+                            if (empty($imageUrl)) continue;
+                            $galleryStmt = $db->prepare("
+                                INSERT IGNORE INTO gallery (product_id, image_url)
+                                VALUES (:product_id, :image_url)
+                            ");
+                            $galleryStmt->execute([
+                                'product_id' => $product['id'],
+                                'image_url' => $imageUrl,
+                            ]);
+                            echo "Inserted gallery image for product ID: {$product['id']}\n";
+                        }
+                    }
+
+                    // Insert attributes
+                    if (!empty($product['attributes'])) {
+                        foreach ($product['attributes'] as $attribute) {
+                            if (empty($attribute['name']) || empty($attribute['type'])) continue;
+
+                            foreach ($attribute['items'] as $item) {
+                                if (empty($item['value'])) continue;
+                                $attributeStmt = $db->prepare("
+                                    INSERT IGNORE INTO attributes (product_id, name, value, type)
+                                    VALUES (:product_id, :name, :value, :type)
+                                ");
+                                $attributeStmt->execute([
+                                    'product_id' => $product['id'],
+                                    'name' => $attribute['name'],
+                                    'value' => $item['value'],
+                                    'type' => $attribute['type'],
+                                ]);
+                                echo "Inserted attribute: {$attribute['name']} -> {$item['value']} for product ID: {$product['id']}\n";
+                            }
+                        }
+                    } else {
+                        echo "No attributes found for product ID: {$product['id']}\n";
+                    }
+                } catch (\PDOException $e) {
+                    echo "Error inserting product ID {$product['id']}: {$e->getMessage()}\n";
+                }
             }
-
-            // Insert prices
-            foreach ($productData['prices'] as $price) {
-                $product->savePrice(
-                    $price['currency']['label'],
-                    $price['currency']['symbol'],
-                    $price['amount']
-                );
-                echo "Price saved: " . $price['amount'] . " " . $price['currency']['label'] . "\n";
-            }
+        } else {
+            echo "No products found in data.\n";
         }
-    }
 
-    private static function saveTextAttribute(Product $product, array $attributeData): void
-    {
-        $attribute = new TextAttribute($attributeData['name'], $product->getId());
-        $attribute->save();
-        echo "Text attribute saved: " . $attributeData['name'] . "\n";
-
-        foreach ($attributeData['items'] as $item) {
-            $attribute->saveItem($item['displayValue'], $item['value']);
-            echo "Text attribute item saved: " . $item['displayValue'] . "\n";
-        }
-    }
-
-    private static function saveSwatchAttribute(Product $product, array $attributeData): void
-    {
-        $attribute = new SwatchAttribute($attributeData['name'], $product->getId());
-        $attribute->save();
-        echo "Swatch attribute saved: " . $attributeData['name'] . "\n";
-
-        foreach ($attributeData['items'] as $item) {
-            $attribute->saveItem($item['displayValue'], $item['value']);
-            echo "Swatch attribute item saved: " . $item['displayValue'] . "\n";
-        }
+        echo "Database seeding completed successfully.\n";
     }
 }
