@@ -37,24 +37,47 @@ class DatabaseSeeder
             echo "Processing products...\n";
             foreach ($data['products'] as $product) {
                 try {
-                    if (empty($product['id']) || empty($product['name'])) {
-                        echo "Skipping product: Missing ID or name.\n";
+                    if (empty($product['id']) || empty($product['name']) || empty($product['category'])) {
+                        echo "Skipping product: Missing ID, name, or category.\n";
                         continue;
                     }
 
-                    // Insert product
+                    // Fetch category_id dynamically
+                    $stmtCategory = $db->prepare("SELECT id FROM categories WHERE name = :name");
+                    $stmtCategory->execute(['name' => $product['category']]);
+                    $categoryId = $stmtCategory->fetchColumn();
+
+                    if (!$categoryId) {
+                        echo "Error: Category '{$product['category']}' not found for product ID: {$product['id']}\n";
+                        continue;
+                    }
+
+                    // Insert product with category_id
                     $stmt = $db->prepare("
-                        INSERT IGNORE INTO products (id, name, description, brand, price)
-                        VALUES (:id, :name, :description, :brand, :price)
-                    ");
+                    INSERT INTO products (id, name, description, brand, category_id, category, price, in_stock)
+                    VALUES (:id, :name, :description, :brand, :category_id, :category, :price, :in_stock)
+                    ON DUPLICATE KEY UPDATE
+                        name = VALUES(name),
+                        description = VALUES(description),
+                        brand = VALUES(brand),
+                        category_id = VALUES(category_id),
+                        category = VALUES(category),
+                        price = VALUES(price),
+                        in_stock = VALUES(in_stock)
+                ");
                     $stmt->execute([
                         'id' => $product['id'],
                         'name' => $product['name'],
                         'description' => $product['description'] ?? '',
                         'brand' => $product['brand'] ?? null,
+                        'category_id' => $categoryId,
+                        'category' => $product['category'],
                         'price' => $product['prices'][0]['amount'] ?? null,
+                        'in_stock' => $product['in_stock'] ?? 1, // Default to 1 if not provided
                     ]);
-                    echo "Inserted product: {$product['name']} (ID: {$product['id']})\n";
+
+
+                    echo "Inserted product: {$product['name']} (ID: {$product['id']}, Category ID: {$categoryId})\n";
 
                     // Insert gallery
                     if (!empty($product['gallery'])) {
@@ -75,7 +98,7 @@ class DatabaseSeeder
                     // Insert attributes
                     if (!empty($product['attributes'])) {
                         foreach ($product['attributes'] as $attribute) {
-                            if (empty($attribute['name']) || empty($attribute['type'])) continue;
+                            if (empty($attribute['name']) || empty($attribute['items'])) continue;
 
                             foreach ($attribute['items'] as $item) {
                                 if (empty($item['value'])) continue;
@@ -87,7 +110,7 @@ class DatabaseSeeder
                                     'product_id' => $product['id'],
                                     'name' => $attribute['name'],
                                     'value' => $item['value'],
-                                    'type' => $attribute['type'],
+                                    'type' => $attribute['type'] ?? null,
                                 ]);
                                 echo "Inserted attribute: {$attribute['name']} -> {$item['value']} for product ID: {$product['id']}\n";
                             }

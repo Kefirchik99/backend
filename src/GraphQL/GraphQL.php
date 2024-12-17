@@ -2,6 +2,10 @@
 
 namespace Yaro\EcommerceProject\GraphQL;
 
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
 use GraphQL\GraphQL as GraphQLBase;
 use GraphQL\Type\Definition\ObjectType;
 use GraphQL\Type\Definition\Type;
@@ -18,6 +22,19 @@ class GraphQL
 {
     public static function handle()
     {
+        // --- CORS Headers Start ---
+        header("Access-Control-Allow-Origin: http://localhost:5173"); // Replace with your frontend origin
+        header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
+        header("Access-Control-Allow-Headers: Content-Type, Authorization");
+        header("Access-Control-Max-Age: 86400");
+
+        // Handle preflight requests (OPTIONS)
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            http_response_code(204);
+            exit;
+        }
+        // --- CORS Headers End ---
+
         try {
             // Log request
             file_put_contents('/tmp/graphql.log', "Request received: " . date('Y-m-d H:i:s') . PHP_EOL, FILE_APPEND);
@@ -43,43 +60,36 @@ class GraphQL
                 'name' => 'Attribute',
                 'fields' => [
                     'name' => ['type' => Type::nonNull(Type::string())],
-                    'value' => ['type' => Type::string()], // Add this field
-                    'type' => ['type' => Type::string()],  // Add this field
+                    'value' => ['type' => Type::string()],
+                    'type' => ['type' => Type::string()],
                     'items' => ['type' => Type::listOf(Type::string())],
-                ],
-            ]);
-            
-
-            // Define Price type
-            $priceType = new ObjectType([
-                'name' => 'Price',
-                'fields' => [
-                    'currency' => ['type' => Type::nonNull(Type::string())],
-                    'symbol' => ['type' => Type::string()],
-                    'amount' => ['type' => Type::nonNull(Type::float())],
                 ],
             ]);
 
             // Define Product type
-            $productType = new ObjectType([
+            // Define Product type
+            $ProductType = new ObjectType([
                 'name' => 'Product',
                 'fields' => [
-                    'id' => ['type' => Type::nonNull(Type::int())],
+                    'id' => ['type' => Type::nonNull(Type::string())],
                     'name' => ['type' => Type::nonNull(Type::string())],
                     'description' => ['type' => Type::string()],
                     'brand' => ['type' => Type::string()],
+                    'inStock' => ['type' => Type::nonNull(Type::boolean())],
+                    'category' => ['type' => Type::string(), 'description' => 'The product category'],
+                    'price' => ['type' => Type::float(), 'description' => 'The product price'],
                     'gallery' => [
                         'type' => Type::listOf(Type::string()),
                         'resolve' => fn($product) => $productResolver->resolveGallery($product['id']),
                     ],
-                    'prices' => [
-                        'type' => Type::listOf($priceType),
-                        'resolve' => fn($product) => $priceResolver->resolvePrices($product['id']),
+                    'attributes' => [
+                        'type' => Type::listOf($attributeType),
+                        'resolve' => fn($product) => $attributeResolver->resolveAttributes($product['id']),
                     ],
-                    'category' => ['type' => $categoryType],
-                    'attributes' => ['type' => Type::listOf($attributeType)],
                 ],
             ]);
+
+
 
             // Define Query type
             $queryType = new ObjectType([
@@ -90,8 +100,11 @@ class GraphQL
                         'resolve' => fn() => $categoryResolver->resolveAll(),
                     ],
                     'products' => [
-                        'type' => Type::listOf($productType),
-                        'resolve' => fn() => $productResolver->resolveAll(),
+                        'type' => Type::listOf($ProductType),
+                        'args' => [
+                            'category' => ['type' => Type::string()],
+                        ],
+                        'resolve' => fn($root, $args) => $productResolver->resolveAll($args['category'] ?? null),
                     ],
                 ],
             ]);
@@ -125,7 +138,13 @@ class GraphQL
             }
 
             $input = json_decode($rawInput, true);
+
+            if (!$input || !isset($input['query'])) {
+                throw new \RuntimeException('Invalid GraphQL request: Missing query.');
+            }
+
             $query = $input['query'];
+
             $variableValues = $input['variables'] ?? null;
 
             $result = GraphQLBase::executeQuery($schema, $query, null, null, $variableValues);
