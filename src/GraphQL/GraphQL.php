@@ -22,31 +22,25 @@ class GraphQL
 {
     public static function handle()
     {
-        // --- CORS Headers Start ---
-        header("Access-Control-Allow-Origin: http://localhost:5173"); // Replace with your frontend origin
+        header("Access-Control-Allow-Origin: http://localhost:5173");
         header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
         header("Access-Control-Allow-Headers: Content-Type, Authorization");
         header("Access-Control-Max-Age: 86400");
 
-        // Handle preflight requests (OPTIONS)
         if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
             http_response_code(204);
             exit;
         }
-        // --- CORS Headers End ---
 
         try {
-            // Log request
             file_put_contents('/tmp/graphql.log', "Request received: " . date('Y-m-d H:i:s') . PHP_EOL, FILE_APPEND);
 
-            // Create resolvers
             $categoryResolver = new CategoryResolver();
             $attributeResolver = new AttributeResolver();
             $priceResolver = new PriceResolver();
             $orderResolver = new OrderResolver();
             $productResolver = new ProductResolver($categoryResolver, $attributeResolver, $priceResolver);
 
-            // Define Category type
             $categoryType = new ObjectType([
                 'name' => 'Category',
                 'fields' => [
@@ -55,7 +49,6 @@ class GraphQL
                 ],
             ]);
 
-            // Define Attribute type
             $attributeType = new ObjectType([
                 'name' => 'Attribute',
                 'fields' => [
@@ -66,8 +59,6 @@ class GraphQL
                 ],
             ]);
 
-            // Define Product type
-            // Define Product type
             $ProductType = new ObjectType([
                 'name' => 'Product',
                 'fields' => [
@@ -76,8 +67,8 @@ class GraphQL
                     'description' => ['type' => Type::string()],
                     'brand' => ['type' => Type::string()],
                     'inStock' => ['type' => Type::nonNull(Type::boolean())],
-                    'category' => ['type' => Type::string(), 'description' => 'The product category'],
-                    'price' => ['type' => Type::float(), 'description' => 'The product price'],
+                    'category' => ['type' => Type::string()],
+                    'price' => ['type' => Type::float()],
                     'gallery' => [
                         'type' => Type::listOf(Type::string()),
                         'resolve' => fn($product) => $productResolver->resolveGallery($product['id']),
@@ -89,9 +80,6 @@ class GraphQL
                 ],
             ]);
 
-
-
-            // Define Query type
             $queryType = new ObjectType([
                 'name' => 'Query',
                 'fields' => [
@@ -106,10 +94,16 @@ class GraphQL
                         ],
                         'resolve' => fn($root, $args) => $productResolver->resolveAll($args['category'] ?? null),
                     ],
+                    'product' => [
+                        'type' => $ProductType,
+                        'args' => [
+                            'id' => ['type' => Type::nonNull(Type::id())],
+                        ],
+                        'resolve' => fn($root, $args) => $productResolver->resolveSingleProduct($args['id']),
+                    ],
                 ],
             ]);
 
-            // Define Mutation type
             $mutationType = new ObjectType([
                 'name' => 'Mutation',
                 'fields' => [
@@ -124,14 +118,12 @@ class GraphQL
                 ],
             ]);
 
-            // Define schema
             $schema = new Schema(
                 (new SchemaConfig())
                     ->setQuery($queryType)
                     ->setMutation($mutationType)
             );
 
-            // Process request
             $rawInput = file_get_contents('php://input');
             if ($rawInput === false) {
                 throw new \RuntimeException('Failed to get php://input');
@@ -144,7 +136,6 @@ class GraphQL
             }
 
             $query = $input['query'];
-
             $variableValues = $input['variables'] ?? null;
 
             $result = GraphQLBase::executeQuery($schema, $query, null, null, $variableValues);

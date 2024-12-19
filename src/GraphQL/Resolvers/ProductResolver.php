@@ -17,6 +17,7 @@ class ProductResolver
         $this->priceResolver = $priceResolver;
     }
 
+    // Resolve all products, optionally filtered by category
     public function resolveAll($category = null)
     {
         $db = Database::getConnection();
@@ -26,7 +27,8 @@ class ProductResolver
             $params = [];
             $query = "SELECT id, name, description, brand, in_stock, category, price FROM products";
 
-            if ($category  && $category !== '1') {
+            // Filter by category if provided and not "all"
+            if ($category && strtolower($category) !== 'all') {
                 $query .= " WHERE category = :category";
                 $params['category'] = $category;
             }
@@ -35,18 +37,13 @@ class ProductResolver
             $stmt->execute($params);
             $products = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
-            // Debugging logs
             file_put_contents('/tmp/graphql.log', "Products fetched: " . print_r($products, true), FILE_APPEND);
 
             foreach ($products as &$product) {
                 $product['inStock'] = (bool) $product['in_stock'];
                 unset($product['in_stock']);
 
-                // Debugging gallery and attributes resolution
-                file_put_contents('/tmp/graphql.log', "Resolving gallery for product ID: {$product['id']}\n", FILE_APPEND);
                 $product['gallery'] = $this->resolveGallery($product['id']);
-
-                file_put_contents('/tmp/graphql.log', "Resolving attributes for product ID: {$product['id']}\n", FILE_APPEND);
                 $product['attributes'] = $this->resolveAttributes($product['id']);
             }
 
@@ -57,6 +54,31 @@ class ProductResolver
         }
     }
 
+    // Resolve a single product by ID
+    public function resolveSingleProduct($id)
+    {
+        $db = Database::getConnection();
+        try {
+            $stmt = $db->prepare("SELECT id, name, description, brand, in_stock, category, price FROM products WHERE id = :id");
+            $stmt->execute(['id' => $id]);
+            $product = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+            if (!$product) {
+                throw new \RuntimeException("Product not found");
+            }
+
+            $product['inStock'] = (bool) $product['in_stock'];
+            unset($product['in_stock']);
+
+            $product['gallery'] = $this->resolveGallery($id);
+            $product['attributes'] = $this->resolveAttributes($id);
+
+            return $product;
+        } catch (\PDOException $e) {
+            file_put_contents('/tmp/graphql.log', "Error fetching product: " . $e->getMessage() . PHP_EOL, FILE_APPEND);
+            throw new \RuntimeException("Database error: " . $e->getMessage());
+        }
+    }
 
     public function resolveGallery(string $productId): array
     {
