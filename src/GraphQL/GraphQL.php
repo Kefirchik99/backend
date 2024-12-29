@@ -35,12 +35,50 @@ class GraphQL
         try {
             file_put_contents('/tmp/graphql.log', "Request received: " . date('Y-m-d H:i:s') . PHP_EOL, FILE_APPEND);
 
-            $categoryResolver = new CategoryResolver();
-            $attributeResolver = new AttributeResolver();
-            $priceResolver = new PriceResolver();
-            $orderResolver = new OrderResolver();
-            $productResolver = new ProductResolver($categoryResolver, $attributeResolver, $priceResolver);
+            // Instantiate resolvers
+            $categoryResolver   = new CategoryResolver();
+            $attributeResolver  = new AttributeResolver();
+            $priceResolver      = new PriceResolver();
+            $orderResolver      = new OrderResolver();
+            $productResolver    = new ProductResolver($categoryResolver, $attributeResolver, $priceResolver);
 
+            // -----------------------
+            // 1) AttributeItem Type
+            // -----------------------
+            $attributeItemType = new ObjectType([
+                'name' => 'AttributeItem',
+                'fields' => [
+                    'id' => ['type' => Type::int()],
+                    'displayValue' => ['type' => Type::string()],
+                    'value' => ['type' => Type::string()],
+                ],
+            ]);
+
+            // -----------------------
+            // 2) Attribute Type
+            // -----------------------
+            $attributeType = new ObjectType([
+                'name' => 'Attribute',
+                'fields' => function () use ($attributeItemType) {
+                    return [
+                        'id' => ['type' => Type::int()],
+                        'name' => ['type' => Type::nonNull(Type::string())],
+                        'value' => ['type' => Type::string()],
+                        'type' => ['type' => Type::string()],
+                        'items' => [
+                            'type' => Type::listOf($attributeItemType),
+                            'resolve' => function ($attribute) {
+                                $resolver = new \Yaro\EcommerceProject\GraphQL\Resolvers\AttributeResolver();
+                                return $resolver->resolveItemsForAttribute($attribute);
+                            },
+                        ],
+                    ];
+                },
+            ]);
+
+            // -----------------------
+            // 3) Category Type
+            // -----------------------
             $categoryType = new ObjectType([
                 'name' => 'Category',
                 'fields' => [
@@ -49,16 +87,9 @@ class GraphQL
                 ],
             ]);
 
-            $attributeType = new ObjectType([
-                'name' => 'Attribute',
-                'fields' => [
-                    'name' => ['type' => Type::nonNull(Type::string())],
-                    'value' => ['type' => Type::string()],
-                    'type' => ['type' => Type::string()],
-                    'items' => ['type' => Type::listOf(Type::string())],
-                ],
-            ]);
-
+            // -----------------------
+            // 4) Product Type
+            // -----------------------
             $ProductType = new ObjectType([
                 'name' => 'Product',
                 'fields' => [
@@ -80,6 +111,9 @@ class GraphQL
                 ],
             ]);
 
+            // -----------------------
+            // 5) Query Type
+            // -----------------------
             $queryType = new ObjectType([
                 'name' => 'Query',
                 'fields' => [
@@ -104,6 +138,9 @@ class GraphQL
                 ],
             ]);
 
+            // -----------------------
+            // 6) Mutation Type
+            // -----------------------
             $mutationType = new ObjectType([
                 'name' => 'Mutation',
                 'fields' => [
@@ -118,12 +155,18 @@ class GraphQL
                 ],
             ]);
 
+            // -----------------------
+            // 7) Final Schema
+            // -----------------------
             $schema = new Schema(
                 (new SchemaConfig())
                     ->setQuery($queryType)
                     ->setMutation($mutationType)
             );
 
+            // -----------------------
+            // Process Request
+            // -----------------------
             $rawInput = file_get_contents('php://input');
             if ($rawInput === false) {
                 throw new \RuntimeException('Failed to get php://input');
