@@ -54,17 +54,17 @@ class DatabaseSeeder
 
                     // Insert product with category_id
                     $stmt = $db->prepare("
-                    INSERT INTO products (id, name, description, brand, category_id, category, price, in_stock)
-                    VALUES (:id, :name, :description, :brand, :category_id, :category, :price, :in_stock)
-                    ON DUPLICATE KEY UPDATE
-                        name = VALUES(name),
-                        description = VALUES(description),
-                        brand = VALUES(brand),
-                        category_id = VALUES(category_id),
-                        category = VALUES(category),
-                        price = VALUES(price),
-                        in_stock = VALUES(in_stock)
-                ");
+                        INSERT INTO products (id, name, description, brand, category_id, category, price, in_stock)
+                        VALUES (:id, :name, :description, :brand, :category_id, :category, :price, :in_stock)
+                        ON DUPLICATE KEY UPDATE
+                            name = VALUES(name),
+                            description = VALUES(description),
+                            brand = VALUES(brand),
+                            category_id = VALUES(category_id),
+                            category = VALUES(category),
+                            price = VALUES(price),
+                            in_stock = VALUES(in_stock)
+                    ");
                     $stmt->execute([
                         'id' => $product['id'],
                         'name' => $product['name'],
@@ -73,9 +73,8 @@ class DatabaseSeeder
                         'category_id' => $categoryId,
                         'category' => $product['category'],
                         'price' => $product['prices'][0]['amount'] ?? null,
-                        'in_stock' => $product['in_stock'] ?? 1, // Default to 1 if not provided
+                        'in_stock' => $product['in_stock'] ?? 1,
                     ]);
-
 
                     echo "Inserted product: {$product['name']} (ID: {$product['id']}, Category ID: {$categoryId})\n";
 
@@ -95,24 +94,54 @@ class DatabaseSeeder
                         }
                     }
 
-                    // Insert attributes
+                    // Insert attributes with attribute items
                     if (!empty($product['attributes'])) {
                         foreach ($product['attributes'] as $attribute) {
                             if (empty($attribute['name']) || empty($attribute['items'])) continue;
 
-                            foreach ($attribute['items'] as $item) {
-                                if (empty($item['value'])) continue;
-                                $attributeStmt = $db->prepare("
-                                    INSERT IGNORE INTO attributes (product_id, name, value, type)
-                                    VALUES (:product_id, :name, :value, :type)
+                            // Insert top-level attribute
+                            $attributeStmt = $db->prepare("
+                                INSERT IGNORE INTO attributes (product_id, name, type)
+                                VALUES (:product_id, :name, :type)
+                            ");
+                            $attributeStmt->execute([
+                                'product_id' => $product['id'],
+                                'name' => $attribute['name'],
+                                'type' => $attribute['type'] ?? null,
+                            ]);
+
+                            $attributeId = $db->lastInsertId();
+
+                            if (!$attributeId) {
+                                // Fetch existing attribute ID if not inserted
+                                $fetchStmt = $db->prepare("
+                                    SELECT id FROM attributes WHERE product_id = :product_id AND name = :name
                                 ");
-                                $attributeStmt->execute([
+                                $fetchStmt->execute([
                                     'product_id' => $product['id'],
                                     'name' => $attribute['name'],
-                                    'value' => $item['value'],
-                                    'type' => $attribute['type'] ?? null,
                                 ]);
-                                echo "Inserted attribute: {$attribute['name']} -> {$item['value']} for product ID: {$product['id']}\n";
+                                $attributeId = $fetchStmt->fetchColumn();
+                            }
+
+                            if (!$attributeId) {
+                                echo "Error: Unable to find attribute ID for '{$attribute['name']}' on product ID: {$product['id']}\n";
+                                continue;
+                            }
+
+                            // Insert attribute items
+                            $itemStmt = $db->prepare("
+                                INSERT INTO attribute_items (attribute_id, display_value, value)
+                                VALUES (:attribute_id, :display_value, :value)
+                            ");
+                            foreach ($attribute['items'] as $item) {
+                                if (empty($item['value'])) continue;
+                                $itemStmt->execute([
+                                    'attribute_id' => $attributeId,
+                                    'display_value' => $item['displayValue'] ?? $item['value'],
+                                    'value' => $item['value'],
+                                ]);
+                                echo "Inserted attribute item: {$attribute['name']} -> {$item['value']} for product ID: {$product['id']}\n";
                             }
                         }
                     } else {
