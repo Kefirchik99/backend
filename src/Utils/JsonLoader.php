@@ -4,22 +4,17 @@ namespace Yaro\EcommerceProject\Utils;
 
 class JsonLoader
 {
-    /**
-     * Load and decode JSON data from a file.
-     *
-     * @param string $filePath The path to the JSON file.
-     * @return array The decoded JSON data as an associative array.
-     * @throws \Exception If the file is missing or invalid.
-     */
     public static function load(string $filePath): array
     {
         if (!file_exists($filePath)) {
-            throw new \Exception("File not found: $filePath");
+            throw new \Exception("JSON file not found at: $filePath");
         }
 
-        $data = json_decode(file_get_contents($filePath), true);
-        if (!$data) {
-            throw new \Exception("Failed to parse JSON file: $filePath");
+        $jsonData = file_get_contents($filePath);
+        $data = json_decode($jsonData, true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new \Exception("Invalid JSON data: " . json_last_error_msg());
         }
 
         return $data;

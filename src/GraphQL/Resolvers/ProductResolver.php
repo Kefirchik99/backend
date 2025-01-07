@@ -6,8 +6,8 @@ use Yaro\EcommerceProject\Config\Database;
 
 class ProductResolver
 {
-    private $categoryResolver;
     private $attributeResolver;
+    private $categoryResolver;
     private $priceResolver;
 
     public function __construct(CategoryResolver $categoryResolver, AttributeResolver $attributeResolver, PriceResolver $priceResolver)
@@ -17,24 +17,84 @@ class ProductResolver
         $this->priceResolver = $priceResolver;
     }
 
-    public function resolveAll()
+    // Resolve all products, optionally filtered by category
+    public function resolveAll($category = null)
     {
         $db = Database::getConnection();
-        $products = $db->query("SELECT * FROM products")->fetchAll();
+        file_put_contents('/tmp/graphql.log', "Starting resolveAll...\n", FILE_APPEND);
 
-        foreach ($products as &$product) {
-            $product['category'] = $this->categoryResolver->resolveById($product['category_id']);
-            $product['attributes'] = $this->attributeResolver->resolveAttributes($product['id']);
+        try {
+            $params = [];
+            $query = "SELECT id, name, description, brand, in_stock, category, price FROM products";
+
+            // Filter by category if provided and not "all"
+            if ($category && strtolower($category) !== 'all') {
+                $query .= " WHERE category = :category";
+                $params['category'] = $category;
+            }
+
+            $stmt = $db->prepare($query);
+            $stmt->execute($params);
+            $products = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+            file_put_contents('/tmp/graphql.log', "Products fetched: " . print_r($products, true), FILE_APPEND);
+
+            foreach ($products as &$product) {
+                $product['inStock'] = (bool) $product['in_stock'];
+                unset($product['in_stock']);
+
+                $product['gallery'] = $this->resolveGallery($product['id']);
+                $product['attributes'] = $this->resolveAttributes($product['id']);
+            }
+
+            return $products;
+        } catch (\PDOException $e) {
+            file_put_contents('/tmp/graphql.log', "Database Error: " . $e->getMessage() . "\n", FILE_APPEND);
+            throw new \RuntimeException("Database error: " . $e->getMessage());
         }
-
-        return $products;
     }
 
-    public function resolveGallery(int $productId): array
+    // Resolve a single product by ID
+    public function resolveSingleProduct($id)
     {
         $db = Database::getConnection();
-        $stmt = $db->prepare("SELECT image_url FROM gallery WHERE product_id = :product_id");
-        $stmt->execute(['product_id' => $productId]);
-        return $stmt->fetchAll(\PDO::FETCH_COLUMN) ?: [];
+        try {
+            $stmt = $db->prepare("SELECT id, name, description, brand, in_stock, category, price FROM products WHERE id = :id");
+            $stmt->execute(['id' => $id]);
+            $product = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+            if (!$product) {
+                throw new \RuntimeException("Product not found");
+            }
+
+            $product['inStock'] = (bool) $product['in_stock'];
+            unset($product['in_stock']);
+
+            $product['gallery'] = $this->resolveGallery($id);
+            $product['attributes'] = $this->resolveAttributes($id);
+
+            return $product;
+        } catch (\PDOException $e) {
+            file_put_contents('/tmp/graphql.log', "Error fetching product: " . $e->getMessage() . PHP_EOL, FILE_APPEND);
+            throw new \RuntimeException("Database error: " . $e->getMessage());
+        }
+    }
+
+    public function resolveGallery(string $productId): array
+    {
+        $db = Database::getConnection();
+        try {
+            $stmt = $db->prepare("SELECT image_url FROM gallery WHERE product_id = :product_id");
+            $stmt->execute(['product_id' => $productId]);
+            return $stmt->fetchAll(\PDO::FETCH_COLUMN) ?: [];
+        } catch (\PDOException $e) {
+            file_put_contents('/tmp/graphql.log', "Gallery Error for $productId: " . $e->getMessage() . "\n", FILE_APPEND);
+            return [];
+        }
+    }
+
+    public function resolveAttributes(string $productId): array
+    {
+        return $this->attributeResolver->resolveAttributes($productId);
     }
 }

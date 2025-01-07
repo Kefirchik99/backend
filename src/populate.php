@@ -8,14 +8,19 @@ use Yaro\EcommerceProject\Utils\JsonLoader;
 use Yaro\EcommerceProject\Utils\DatabaseSeeder;
 
 try {
-    // Load JSON data
     $dataFile = realpath(__DIR__ . '/../data/data.json');
     if (!$dataFile) {
-        throw new \Exception("Data file not found.");
+        die("Resolved data file path is invalid. Path attempted: " . __DIR__ . '/../data/data.json' . "\n");
     }
+    echo "Resolved data file path: $dataFile\n";
+
+    // Load JSON data
     $data = JsonLoader::load($dataFile);
 
-    // Seed the database
+    if (!isset($data['data']) || !is_array($data['data'])) {
+        throw new \Exception("Invalid JSON structure. 'data' key missing or not an array.");
+    }
+
     DatabaseSeeder::seed($data['data']);
 
     echo "Database populated successfully.\n";
