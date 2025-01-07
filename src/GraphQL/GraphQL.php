@@ -48,9 +48,9 @@ class GraphQL
             $attributeItemType = new ObjectType([
                 'name' => 'AttributeItem',
                 'fields' => [
-                    'id' => ['type' => Type::int()],
-                    'displayValue' => ['type' => Type::string()],
-                    'value' => ['type' => Type::string()],
+                    'id' => ['type' => Type::nonNull(Type::string())],
+                    'displayValue' => ['type' => Type::nonNull(Type::string())],
+                    'value' => ['type' => Type::nonNull(Type::string())],
                 ],
             ]);
 
@@ -61,15 +61,14 @@ class GraphQL
                 'name' => 'Attribute',
                 'fields' => function () use ($attributeItemType) {
                     return [
-                        'id' => ['type' => Type::int()],
+                        'id' => ['type' => Type::nonNull(Type::int())],
                         'name' => ['type' => Type::nonNull(Type::string())],
-                        'value' => ['type' => Type::string()],
                         'type' => ['type' => Type::string()],
                         'items' => [
                             'type' => Type::listOf($attributeItemType),
                             'resolve' => function ($attribute) {
-                                $resolver = new \Yaro\EcommerceProject\GraphQL\Resolvers\AttributeResolver();
-                                return $resolver->resolveItemsForAttribute($attribute);
+                                $resolver = new AttributeResolver();
+                                return $resolver->resolveItemsForAttribute($attribute['id']);
                             },
                         ],
                     ];
@@ -102,11 +101,16 @@ class GraphQL
                     'price' => ['type' => Type::float()],
                     'gallery' => [
                         'type' => Type::listOf(Type::string()),
-                        'resolve' => fn($product) => $productResolver->resolveGallery($product['id']),
+                        'resolve' => function ($product) use ($productResolver) {
+                            $gallery = $productResolver->resolveGallery($product['id']);
+                            return !empty($gallery) ? $gallery : ['https://via.placeholder.com/300'];
+                        },
                     ],
                     'attributes' => [
                         'type' => Type::listOf($attributeType),
-                        'resolve' => fn($product) => $attributeResolver->resolveAttributes($product['id']),
+                        'resolve' => function ($product) use ($attributeResolver) {
+                            return $attributeResolver->resolveAttributes($product['id']);
+                        },
                     ],
                 ],
             ]);
@@ -119,21 +123,27 @@ class GraphQL
                 'fields' => [
                     'categories' => [
                         'type' => Type::listOf($categoryType),
-                        'resolve' => fn() => $categoryResolver->resolveAll(),
+                        'resolve' => function () use ($categoryResolver) {
+                            return $categoryResolver->resolveAll();
+                        },
                     ],
                     'products' => [
                         'type' => Type::listOf($ProductType),
                         'args' => [
                             'category' => ['type' => Type::string()],
                         ],
-                        'resolve' => fn($root, $args) => $productResolver->resolveAll($args['category'] ?? null),
+                        'resolve' => function ($root, $args) use ($productResolver) {
+                            return $productResolver->resolveAll($args['category'] ?? null);
+                        },
                     ],
                     'product' => [
                         'type' => $ProductType,
                         'args' => [
                             'id' => ['type' => Type::nonNull(Type::id())],
                         ],
-                        'resolve' => fn($root, $args) => $productResolver->resolveSingleProduct($args['id']),
+                        'resolve' => function ($root, $args) use ($productResolver) {
+                            return $productResolver->resolveSingleProduct($args['id']);
+                        },
                     ],
                 ],
             ]);
@@ -150,7 +160,9 @@ class GraphQL
                             'productId' => ['type' => Type::nonNull(Type::int())],
                             'quantity' => ['type' => Type::nonNull(Type::int())],
                         ],
-                        'resolve' => fn($root, $args) => $orderResolver->createOrder($args['productId'], $args['quantity']),
+                        'resolve' => function ($root, $args) use ($orderResolver) {
+                            return $orderResolver->createOrder($args['productId'], $args['quantity']);
+                        },
                     ],
                 ],
             ]);

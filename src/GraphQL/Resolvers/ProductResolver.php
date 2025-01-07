@@ -44,6 +44,10 @@ class ProductResolver
                 unset($product['in_stock']);
 
                 $product['gallery'] = $this->resolveGallery($product['id']);
+                if (empty($product['gallery'])) {
+                    $product['gallery'] = ['https://via.placeholder.com/300']; // ✅ FIX: Placeholder image if none exist
+                }
+
                 $product['attributes'] = $this->resolveAttributes($product['id']);
             }
 
@@ -71,6 +75,10 @@ class ProductResolver
             unset($product['in_stock']);
 
             $product['gallery'] = $this->resolveGallery($id);
+            if (empty($product['gallery'])) {
+                $product['gallery'] = ['https://via.placeholder.com/300']; // ✅ FIX: Placeholder image if none exist
+            }
+
             $product['attributes'] = $this->resolveAttributes($id);
 
             return $product;
@@ -95,6 +103,29 @@ class ProductResolver
 
     public function resolveAttributes(string $productId): array
     {
-        return $this->attributeResolver->resolveAttributes($productId);
+        $attributes = $this->attributeResolver->resolveAttributes($productId);
+
+        foreach ($attributes as &$attribute) {
+            $attribute['items'] = $this->resolveAttributeItems($productId, $attribute['id']);
+        }
+
+        return $attributes;
+    }
+
+    public function resolveAttributeItems(string $productId, int $attributeId): array
+    {
+        $db = Database::getConnection();
+        try {
+            $stmt = $db->prepare("
+                SELECT id, display_value AS displayValue, value 
+                FROM attribute_items 
+                WHERE attribute_id = :attribute_id
+            ");
+            $stmt->execute(['attribute_id' => $attributeId]);
+            return $stmt->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+        } catch (\PDOException $e) {
+            file_put_contents('/tmp/graphql.log', "Error fetching attribute items for product ID $productId, attribute ID $attributeId: " . $e->getMessage() . "\n", FILE_APPEND);
+            return [];
+        }
     }
 }
