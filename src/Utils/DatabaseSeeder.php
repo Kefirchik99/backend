@@ -73,7 +73,7 @@ class DatabaseSeeder
                         'category_id' => $categoryId,
                         'category' => $product['category'],
                         'price' => $product['prices'][0]['amount'] ?? null,
-                        'in_stock' => $product['in_stock'] ?? 1,
+                        'in_stock' => isset($product['inStock']) ? (int) $product['inStock'] : 1,
                     ]);
 
                     echo "Inserted product: {$product['name']} (ID: {$product['id']}, Category ID: {$categoryId})\n";
