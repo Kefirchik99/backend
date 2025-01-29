@@ -1,29 +1,42 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Yaro\EcommerceProject;
 
+require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/../bootstrap.php';
 
 use Yaro\EcommerceProject\Utils\JsonLoader;
 use Yaro\EcommerceProject\Utils\DatabaseSeeder;
 
+$logger = $GLOBALS['logger'] ?? null;
+
+if (!$logger) {
+    die("Logger not initialized.\n");
+}
+
 try {
     $dataFile = realpath(__DIR__ . '/../data/data.json');
-    if (!$dataFile) {
-        die("Resolved data file path is invalid. Path attempted: " . __DIR__ . '/../data/data.json' . "\n");
-    }
-    echo "Resolved data file path: $dataFile\n";
-
-    // Load JSON data
-    $data = JsonLoader::load($dataFile);
-
-    if (!isset($data['data']) || !is_array($data['data'])) {
-        throw new \Exception("Invalid JSON structure. 'data' key missing or not an array.");
+    if (!$dataFile || !file_exists($dataFile)) {
+        throw new \Exception("File not found or inaccessible: " . ($dataFile ?? 'Invalid path'));
     }
 
-    DatabaseSeeder::seed($data['data']);
+    $logger->info("Resolved data file path: $dataFile");
 
-    echo "Database populated successfully.\n";
+    $jsonLoader = new JsonLoader($logger);
+    $payload = $jsonLoader->load($dataFile);
+
+    if (!isset($payload['data'])) {
+        throw new \Exception("Invalid JSON structure: Missing 'data' key at top level.");
+    }
+
+    $actualData = $payload['data'];
+    $databaseSeeder = new DatabaseSeeder($logger);
+    $databaseSeeder->seed($actualData);
+
+    $logger->info("Database populated successfully.");
 } catch (\Exception $e) {
-    die("Error during database seeding: " . $e->getMessage() . "\n");
+    $logger->error("Error during database seeding: " . $e->getMessage());
+    echo "Error during database seeding: " . $e->getMessage() . "\n";
 }

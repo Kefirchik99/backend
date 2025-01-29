@@ -1,22 +1,19 @@
 <?php
 require '/var/www/html/vendor/autoload.php'; // Correct the path to the vendor directory
-
 use Yaro\EcommerceProject\Config\Database;
+use Psr\Log\LoggerInterface;
 
-function populateGalleryFromJson(string $jsonFilePath): void
+function populateGalleryFromJson(string $jsonFilePath, LoggerInterface $logger): void
 {
     // Get database connection
     $db = Database::getConnection();
-
     // Read JSON file
     $jsonData = json_decode(file_get_contents($jsonFilePath), true);
-
     // Validate JSON
     if (!is_array($jsonData)) {
-        echo "Invalid JSON file.\n";
+        $logger->error("Invalid JSON file.");
         return;
     }
-
     // Populate gallery
     foreach ($jsonData as $product) {
         if (!empty($product['gallery'])) {
@@ -30,15 +27,22 @@ function populateGalleryFromJson(string $jsonFilePath): void
                         'product_id' => $product['id'],
                         'image_url' => $imageUrl,
                     ]);
+                    $logger->info("Inserted gallery image for product ID {$product['id']}: $imageUrl");
                 } catch (\PDOException $e) {
-                    echo "Error inserting gallery for product_id {$product['id']}: " . $e->getMessage() . "\n";
+                    $logger->error("Error inserting gallery for product_id {$product['id']}: " . $e->getMessage());
                 }
             }
         }
     }
-
-    echo "Gallery table populated successfully.\n";
+    $logger->info("Gallery table populated successfully.");
 }
 
-// Run the script
-populateGalleryFromJson('/var/www/html/backend/data/data.json');  
+// Fetch the global logger instance
+$logger = $GLOBALS['logger'] ?? null;
+
+if ($logger) {
+    // Run the script
+    populateGalleryFromJson('/var/www/html/backend/data/data.json', $logger);
+} else {
+    echo "Logger not initialized.";
+}

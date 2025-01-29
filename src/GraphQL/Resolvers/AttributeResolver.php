@@ -3,14 +3,21 @@
 namespace Yaro\EcommerceProject\GraphQL\Resolvers;
 
 use Yaro\EcommerceProject\Config\Database;
+use Psr\Log\LoggerInterface;
 
 class AttributeResolver
 {
+    private $logger;
+
+    public function __construct(LoggerInterface $logger)
+    {
+        $this->logger = $logger;
+    }
+
     public function resolveAttributes(string $productId)
     {
         try {
             $db = Database::getConnection();
-
             $stmt = $db->prepare("
                 SELECT id, name, type 
                 FROM attributes 
@@ -18,14 +25,13 @@ class AttributeResolver
             ");
             $stmt->execute(['product_id' => $productId]);
             $attributes = $stmt->fetchAll(\PDO::FETCH_ASSOC);
-
             foreach ($attributes as &$attr) {
                 $attr['items'] = $this->resolveItemsForAttribute($attr['id']);
             }
-
+            $this->logger->info("Attributes fetched for product ID {$productId}: " . print_r($attributes, true));
             return $attributes ?: [];
         } catch (\PDOException $e) {
-            error_log("Database error in resolveAttributes for product ID {$productId}: " . $e->getMessage());
+            $this->logger->error("Database error in resolveAttributes for product ID {$productId}: " . $e->getMessage());
             return [];
         }
     }
@@ -40,9 +46,11 @@ class AttributeResolver
                 WHERE attribute_id = :attribute_id
             ");
             $stmt->execute(['attribute_id' => $attributeId]);
-            return $stmt->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+            $items = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+            $this->logger->info("Attribute items fetched for attribute ID {$attributeId}: " . print_r($items, true));
+            return $items ?: [];
         } catch (\PDOException $e) {
-            error_log("Database error in resolveItemsForAttribute for attribute ID {$attributeId}: " . $e->getMessage());
+            $this->logger->error("Database error in resolveItemsForAttribute for attribute ID {$attributeId}: " . $e->getMessage());
             return [];
         }
     }

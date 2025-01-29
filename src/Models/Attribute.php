@@ -2,9 +2,6 @@
 
 namespace Yaro\EcommerceProject\Models;
 
-use Yaro\EcommerceProject\Config\Database;
-use PDOException;
-
 abstract class Attribute extends Model
 {
     protected static string $table = 'attributes';
@@ -18,27 +15,37 @@ abstract class Attribute extends Model
         $this->productId = $productId;
     }
 
+    public function getName(): string
+    {
+        return $this->name;
+    }
+
+    public function getProductId(): int
+    {
+        return $this->productId;
+    }
+
     abstract public function save(): void;
 
     public function getId(): ?int
     {
-        return $this->fetchColumn("
-            SELECT id FROM " . static::$table . " WHERE name = :name AND product_id = :productId
-        ", [
+        $query = "SELECT id FROM " . static::$table . " WHERE name = :name AND product_id = :productId";
+        $params = [
             'name' => $this->name,
             'productId' => $this->productId,
-        ]);
+        ];
+        return $this->fetchColumn($query, $params);
     }
 
     public function saveItem(string $displayValue, string $value): void
     {
-        $this->executeQuery("
-            INSERT INTO attribute_items (attribute_id, display_value, value)
-            VALUES (:attribute_id, :display_value, :value)
-        ", [
+        $query = "INSERT INTO attribute_items (attribute_id, display_value, value)
+                  VALUES (:attribute_id, :display_value, :value)";
+        $params = [
             'attribute_id' => $this->getId(),
             'display_value' => $displayValue,
             'value' => $value,
-        ]);
+        ];
+        $this->executeQuery($query, $params);
     }
 }
