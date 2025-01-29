@@ -1,27 +1,32 @@
 <?php
 
-require_once __DIR__ . '/../vendor/autoload.php';
+declare(strict_types=1);
 
+namespace Yaro\EcommerceProject;
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Monolog\Level;
+use Monolog\Logger;
+use Monolog\Handler\StreamHandler;
 use Yaro\EcommerceProject\Config\Database;
-use Yaro\EcommerceProject\Utils\DatabaseSeeder;
-use Yaro\EcommerceProject\Utils\JsonLoader;
 
 try {
-    // Initialize database connection
+    // Initialize DB connection once
     $db = Database::getConnection();
 
-    // Load data from JSON file
-    $dataFile = realpath(__DIR__ . '/../data/data.json');
-    if (!$dataFile || !file_exists($dataFile)) {
-        throw new Exception("File not found or inaccessible: " . ($dataFile ?? 'Invalid path'));
-    }
+    // Initialize Monolog
+    $logger = new Logger('my_logger');
+    $logger->pushHandler(new StreamHandler(__DIR__ . '/logs/my_app.log', Level::Debug));
 
-    $data = JsonLoader::load($dataFile);
+    // Make the logger accessible globally
+    $GLOBALS['logger'] = $logger;
 
-    // Seed the database
-    DatabaseSeeder::seed($data);
-
-    echo "Database populated successfully.\n";
-} catch (Exception $e) {
-    echo "Error during database seeding: " . $e->getMessage() . "\n";
+    // If there's any other minimal config you want, do it here
+} catch (\Exception $e) {
+    // If you absolutely need to handle an error, just log it
+    $logger = new Logger('my_logger');
+    $logger->pushHandler(new StreamHandler(__DIR__ . '/logs/my_app.log', Level::Debug));
+    $logger->error("Bootstrap error: " . $e->getMessage());
+    // No echo. Let the request fail gracefully or continue
 }

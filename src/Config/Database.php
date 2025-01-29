@@ -23,9 +23,16 @@ class Database
                     ]
                 );
             } catch (PDOException $e) {
+                error_log('Connection failed: ' . $e->getMessage());
                 die('Connection failed: ' . $e->getMessage());
             }
         }
         return self::$instance;
+    }
+
+    // Optional: Add a method to close the connection if needed
+    public static function closeConnection(): void
+    {
+        self::$instance = null;
     }
 }

@@ -14,4 +14,3 @@ class PriceResolver
         return $stmt->fetchAll(\PDO::FETCH_ASSOC);
     }
 }
-

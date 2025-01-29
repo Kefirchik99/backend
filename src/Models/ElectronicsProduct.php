@@ -13,17 +13,17 @@ class ElectronicsProduct extends Product
 
     public function save(): void
     {
-        $db = Database::getConnection();
+        $db = $this->getConnection();
         $query = "INSERT INTO " . static::$table . " (name, description, brand, category_id, in_stock)
                   VALUES (:name, :description, :brand, :category_id, :in_stock)
                   ON DUPLICATE KEY UPDATE description = :description, brand = :brand, in_stock = :in_stock";
         $stmt = $db->prepare($query);
         $stmt->execute([
-            'name' => $this->name,
-            'description' => $this->description,
-            'brand' => $this->brand,
-            'category_id' => $this->categoryId,
-            'in_stock' => $this->inStock ? 1 : 0,
+            'name' => $this->getName(),
+            'description' => $this->getDescription(),
+            'brand' => $this->getBrand(),
+            'category_id' => $this->getCategoryId(),
+            'in_stock' => $this->isInStock() ? 1 : 0,
         ]);
     }
 
@@ -34,7 +34,7 @@ class ElectronicsProduct extends Product
 
     public function saveGallery(): void
     {
-        $db = Database::getConnection();
+        $db = $this->getConnection();
         foreach ($this->galleryImages as $imageUrl) {
             $stmt = $db->prepare("INSERT INTO gallery (product_id, image_url) VALUES (:product_id, :image_url)");
             $stmt->execute([
@@ -55,7 +55,7 @@ class ElectronicsProduct extends Product
 
     public function savePrices(): void
     {
-        $db = Database::getConnection();
+        $db = $this->getConnection();
         foreach ($this->prices as $price) {
             $stmt = $db->prepare("INSERT INTO prices (product_id, currency, symbol, amount)
                                   VALUES (:product_id, :currency, :symbol, :amount)");
@@ -72,11 +72,11 @@ class ElectronicsProduct extends Product
     {
         return [
             'id' => $this->getId(),
-            'name' => $this->name,
-            'description' => $this->description,
-            'brand' => $this->brand,
+            'name' => $this->getName(),
+            'description' => $this->getDescription(),
+            'brand' => $this->getBrand(),
             'category' => 'Electronics',
-            'inStock' => $this->inStock,
+            'inStock' => $this->isInStock(),
         ];
     }
 }
