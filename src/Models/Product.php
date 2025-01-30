@@ -20,7 +20,6 @@ abstract class Model
             $stmt = $db->prepare($query);
             return $stmt->execute($params);
         } catch (\PDOException $e) {
-            // Log the error or handle it appropriately
             error_log("Error: " . $e->getMessage());
             return false;
         }
@@ -35,7 +34,6 @@ abstract class Model
             $id = $stmt->fetchColumn();
             return $id !== false ? (int)$id : null;
         } catch (\PDOException $e) {
-            // Log the error or handle it appropriately
             error_log("Error: " . $e->getMessage());
             return null;
         }
@@ -91,6 +89,7 @@ class Product extends Model
         $query = "INSERT INTO " . static::$table . " (name, description, brand, category_id, in_stock)
                   VALUES (:name, :description, :brand, :category_id, :in_stock)
                   ON DUPLICATE KEY UPDATE description = :description, brand = :brand, in_stock = :in_stock";
+
         $params = [
             'name' => $this->name,
             'description' => $this->description,
@@ -98,6 +97,7 @@ class Product extends Model
             'category_id' => $this->categoryId,
             'in_stock' => $this->inStock ? 1 : 0,
         ];
+
         $this->executeQuery($query, $params);
     }
 
@@ -108,6 +108,7 @@ class Product extends Model
             'name' => $this->name,
             'category_id' => $this->categoryId,
         ];
+
         return $this->fetchColumn($query, $params);
     }
 
@@ -118,6 +119,7 @@ class Product extends Model
             'product_id' => $this->getId(),
             'image_url' => $imageUrl,
         ];
+
         $this->executeQuery($query, $params);
     }
 
@@ -125,12 +127,14 @@ class Product extends Model
     {
         $query = "INSERT INTO prices (product_id, currency, symbol, amount)
                   VALUES (:product_id, :currency, :symbol, :amount)";
+
         $params = [
             'product_id' => $this->getId(),
             'currency' => $currency,
             'symbol' => $symbol,
             'amount' => $amount,
         ];
+
         $this->executeQuery($query, $params);
     }
 }

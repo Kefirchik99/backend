@@ -21,7 +21,6 @@ abstract class Model
             $stmt = $db->prepare($query);
             return $stmt->execute($params);
         } catch (\PDOException $e) {
-            // Log the error or handle it appropriately
             error_log("Error: " . $e->getMessage());
             return false;
         }
@@ -36,7 +35,6 @@ abstract class Model
             $id = $stmt->fetchColumn();
             return $id !== false ? (int)$id : null;
         } catch (\PDOException $e) {
-            // Log the error or handle it appropriately
             error_log("Error: " . $e->getMessage());
             return null;
         }
@@ -69,7 +67,10 @@ class TextAttribute extends Model
 
     public function save(): void
     {
-        $query = "INSERT INTO " . static::$table . " (product_id, name) VALUES (:product_id, :name)";
+        $query = "
+            INSERT INTO " . static::$table . " (product_id, name) 
+            VALUES (:product_id, :name)
+        ";
         $params = [
             'product_id' => $this->productId,
             'name' => $this->name,
@@ -103,7 +104,10 @@ class TextAttribute extends Model
 
     public function getId(): ?int
     {
-        $query = "SELECT id FROM " . static::$table . " WHERE name = :name AND product_id = :product_id";
+        $query = "
+            SELECT id FROM " . static::$table . " 
+            WHERE name = :name AND product_id = :product_id
+        ";
         $params = [
             'name' => $this->name,
             'product_id' => $this->productId,

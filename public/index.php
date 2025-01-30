@@ -13,7 +13,6 @@ use Yaro\EcommerceProject\GraphQL\Resolvers\AttributeResolver;
 use Yaro\EcommerceProject\GraphQL\Resolvers\PriceResolver;
 use Yaro\EcommerceProject\GraphQL\Resolvers\OrderResolver;
 
-// Fetch the global logger instance
 $logger = $GLOBALS['logger'] ?? null;
 
 if (!$logger) {
@@ -24,11 +23,9 @@ $dispatcher = FastRoute\simpleDispatcher(function (RouteCollector $r) {
     $r->addRoute(['GET', 'POST', 'OPTIONS'], '/graphql', [GraphQL::class, 'handle']);
 });
 
-// Fetch method and URI from server request
 $httpMethod = $_SERVER['REQUEST_METHOD'];
 $uri = $_SERVER['REQUEST_URI'];
 
-// Remove query string and decode URI
 if (false !== $pos = strpos($uri, '?')) {
     $uri = substr($uri, 0, $pos);
 }
@@ -41,23 +38,22 @@ switch ($routeInfo[0]) {
         http_response_code(404);
         echo json_encode(['error' => 'Not Found']);
         break;
+
     case Dispatcher::METHOD_NOT_ALLOWED:
         http_response_code(405);
         echo json_encode(['error' => 'Method Not Allowed']);
         break;
-    case Dispatcher::FOUND:
-        $handler = $routeInfo[1];
-        $vars = $routeInfo[2];
-        [$class, $method] = $handler;
 
-        // Instantiate resolvers with logger
+    case Dispatcher::FOUND:
+        [$class, $method] = $routeInfo[1];
+        $vars = $routeInfo[2];
+
         $categoryResolver   = new CategoryResolver($logger);
         $attributeResolver  = new AttributeResolver($logger);
         $priceResolver      = new PriceResolver();
         $orderResolver      = new OrderResolver($logger);
         $productResolver    = new ProductResolver($categoryResolver, $attributeResolver, $priceResolver, $logger);
 
-        // Pass the logger instance to the GraphQL handler if available
         if ($logger) {
             $response = call_user_func([new $class($logger), $method], $vars);
         } else {
@@ -66,6 +62,7 @@ switch ($routeInfo[0]) {
 
         echo $response;
         break;
+
     default:
         echo json_encode(['message' => 'Welcome to the eCommerce API!']);
         break;
