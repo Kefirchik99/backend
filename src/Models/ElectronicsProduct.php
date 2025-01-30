@@ -2,8 +2,6 @@
 
 namespace Yaro\EcommerceProject\Models;
 
-use Yaro\EcommerceProject\Config\Database;
-
 class ElectronicsProduct extends Product
 {
     protected static string $table = 'electronics_products';
@@ -14,10 +12,11 @@ class ElectronicsProduct extends Product
     public function save(): void
     {
         $db = $this->getConnection();
-        $query = "INSERT INTO " . static::$table . " (name, description, brand, category_id, in_stock)
-                  VALUES (:name, :description, :brand, :category_id, :in_stock)
-                  ON DUPLICATE KEY UPDATE description = :description, brand = :brand, in_stock = :in_stock";
-        $stmt = $db->prepare($query);
+        $stmt = $db->prepare("
+            INSERT INTO " . static::$table . " (name, description, brand, category_id, in_stock)
+            VALUES (:name, :description, :brand, :category_id, :in_stock)
+            ON DUPLICATE KEY UPDATE description = :description, brand = :brand, in_stock = :in_stock
+        ");
         $stmt->execute([
             'name' => $this->getName(),
             'description' => $this->getDescription(),
@@ -36,7 +35,10 @@ class ElectronicsProduct extends Product
     {
         $db = $this->getConnection();
         foreach ($this->galleryImages as $imageUrl) {
-            $stmt = $db->prepare("INSERT INTO gallery (product_id, image_url) VALUES (:product_id, :image_url)");
+            $stmt = $db->prepare("
+                INSERT INTO gallery (product_id, image_url) 
+                VALUES (:product_id, :image_url)
+            ");
             $stmt->execute([
                 'product_id' => $this->getId(),
                 'image_url' => $imageUrl,
@@ -57,8 +59,10 @@ class ElectronicsProduct extends Product
     {
         $db = $this->getConnection();
         foreach ($this->prices as $price) {
-            $stmt = $db->prepare("INSERT INTO prices (product_id, currency, symbol, amount)
-                                  VALUES (:product_id, :currency, :symbol, :amount)");
+            $stmt = $db->prepare("
+                INSERT INTO prices (product_id, currency, symbol, amount)
+                VALUES (:product_id, :currency, :symbol, :amount)
+            ");
             $stmt->execute([
                 'product_id' => $this->getId(),
                 'currency' => $price['currency'],

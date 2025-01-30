@@ -1,61 +1,86 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Yaro\EcommerceProject\GraphQL\Resolvers;
 
 use Yaro\EcommerceProject\Config\Database;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
+use PDO;
+use PDOException;
 
 class OrderResolver
 {
-    private $logger;
+    private LoggerInterface $logger;
 
     public function __construct(LoggerInterface $logger)
     {
         $this->logger = $logger;
     }
 
-    // CHANGED HERE: productId is now a string, not int
-    public function createOrder(string $productId, int $quantity): string
+    public function createOrder(array $products): string
     {
-        if ($quantity <= 0) {
-            throw new RuntimeException("Quantity must be greater than zero.");
+        if (empty($products)) {
+            throw new RuntimeException("Cannot create an empty order.");
         }
 
         $db = Database::getConnection();
 
-        // Use productId as a string in your query
-        $stmt = $db->prepare("SELECT * FROM products WHERE id = :id");
-        $stmt->execute(['id' => $productId]);
-        $product = $stmt->fetch();
+        try {
+            $db->beginTransaction();
 
-        if (!$product) {
-            $this->logger->error("Product not found for ID {$productId}");
-            throw new RuntimeException("Product not found.");
+            $total = array_reduce($products, fn($sum, $item) => $sum + ($item['price'] * $item['quantity']), 0);
+
+            $stmt = $db->prepare("INSERT INTO orders (total) VALUES (:total)");
+            $stmt->execute(['total' => $total]);
+            $orderId = $db->lastInsertId();
+
+            $stmt = $db->prepare("
+                INSERT INTO order_items (order_id, product_id, quantity, price) 
+                VALUES (:order_id, :product_id, :quantity, :price)
+            ");
+
+            foreach ($products as $item) {
+                $stmt->execute([
+                    'order_id'  => $orderId,
+                    'product_id' => (string) $item['productId'],
+                    'quantity'   => (int) $item['quantity'],
+                    'price'      => (float) $item['price'],
+                ]);
+            }
+
+            $db->commit();
+            return "Order #$orderId created successfully!";
+        } catch (PDOException $e) {
+            $db->rollBack();
+            $this->logger->error("Failed to create order: " . $e->getMessage());
+            throw new RuntimeException("Failed to create order: " . $e->getMessage());
         }
+    }
 
-        if (!isset($product['price'])) {
-            $this->logger->error("Price information is missing for product ID {$productId}");
-            throw new RuntimeException("Price information is missing for the selected product.");
-        }
-
-        $total = $product['price'] * $quantity;
-
-        // Insert order into the database
-        $stmt = $db->prepare("
-            INSERT INTO orders (product_id, quantity, total)
-            VALUES (:product_id, :quantity, :total)
+    public function resolveAll(): array
+    {
+        $db = Database::getConnection();
+        $stmt = $db->query("
+            SELECT o.id AS id, o.total, o.created_at, 
+                   JSON_ARRAYAGG(
+                       JSON_OBJECT('productId', oi.product_id, 'quantity', oi.quantity, 'price', oi.price)
+                   ) AS items
+            FROM orders o
+            JOIN order_items oi ON o.id = oi.order_id
+            GROUP BY o.id
         ");
-        $stmt->execute([
-            'product_id' => $productId, // store string-based product ID
-            'quantity'   => $quantity,
-            'total'      => $total,
-        ]);
 
-        $this->logger->info(
-            "Order created successfully for product ID {$productId} with quantity {$quantity} and total {$total}"
-        );
+        $orders = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-        return "Order created successfully!";
+        return array_map(function ($order) {
+            return [
+                'id' => $order['id'],
+                'total' => $order['total'],
+                'created_at' => $order['created_at'],
+                'items' => json_decode($order['items'], true) ?? []
+            ];
+        }, $orders);
     }
 }

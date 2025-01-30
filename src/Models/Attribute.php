@@ -1,6 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Yaro\EcommerceProject\Models;
+
+use Psr\Log\LoggerInterface;
 
 abstract class Attribute extends Model
 {
@@ -9,8 +13,9 @@ abstract class Attribute extends Model
     protected string $name;
     protected int $productId;
 
-    public function __construct(string $name, int $productId)
+    public function __construct(string $name, int $productId, LoggerInterface $logger)
     {
+        parent::__construct($logger);
         $this->name = $name;
         $this->productId = $productId;
     }
@@ -34,18 +39,30 @@ abstract class Attribute extends Model
             'name' => $this->name,
             'productId' => $this->productId,
         ];
-        return $this->fetchColumn($query, $params);
+
+        return (int) $this->fetchColumn($query, $params);
     }
 
     public function saveItem(string $displayValue, string $value): void
     {
+        $attributeId = $this->getId();
+
+        if ($attributeId === null) {
+            $this->logger->error("Failed to save item: Attribute ID is null for name '{$this->name}'.");
+            return;
+        }
+
         $query = "INSERT INTO attribute_items (attribute_id, display_value, value)
                   VALUES (:attribute_id, :display_value, :value)";
+
         $params = [
-            'attribute_id' => $this->getId(),
+            'attribute_id' => $attributeId,
             'display_value' => $displayValue,
             'value' => $value,
         ];
-        $this->executeQuery($query, $params);
+
+        if (!$this->executeQuery($query, $params)) {
+            $this->logger->error("Failed to save attribute item for Attribute ID {$attributeId}.");
+        }
     }
 }

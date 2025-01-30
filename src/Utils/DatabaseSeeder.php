@@ -21,9 +21,7 @@ class DatabaseSeeder
         $db = Database::getConnection();
         $this->logger->info("Starting database seeding...");
 
-        // Handle categories
         if (!empty($data['categories'])) {
-            $this->logger->info("Processing categories...");
             foreach ($data['categories'] as $category) {
                 try {
                     if (empty($category['name'])) {
@@ -37,29 +35,23 @@ class DatabaseSeeder
                     $this->logger->error("Error inserting category: {$e->getMessage()}");
                 }
             }
-        } else {
-            $this->logger->info("No categories found in data.");
         }
 
-        // Handle products
         if (!empty($data['products'])) {
-            $this->logger->info("Processing products...");
             foreach ($data['products'] as $product) {
                 try {
                     if (empty($product['id']) || empty($product['name']) || empty($product['category'])) {
                         $this->logger->warning("Skipping product: Missing ID, name, or category.");
                         continue;
                     }
-                    // Fetch category_id dynamically
                     $stmtCategory = $db->prepare("SELECT id FROM categories WHERE name = :name");
                     $stmtCategory->execute(['name' => $product['category']]);
                     $categoryId = $stmtCategory->fetchColumn();
                     if (!$categoryId) {
-                        $this->logger->error("Error: Category '{$product['category']}' not found for product ID: {$product['id']}");
+                        $this->logger->error("Category '{$product['category']}' not found for product ID: {$product['id']}");
                         continue;
                     }
 
-                    // Insert product with category_id
                     $stmt = $db->prepare("
                         INSERT INTO products (id, name, description, brand, category_id, category, price, in_stock)
                         VALUES (:id, :name, :description, :brand, :category_id, :category, :price, :in_stock)
@@ -84,7 +76,6 @@ class DatabaseSeeder
                     ]);
                     $this->logger->info("Inserted product: {$product['name']} (ID: {$product['id']}, Category ID: {$categoryId})");
 
-                    // Insert gallery
                     if (!empty($product['gallery'])) {
                         foreach ($product['gallery'] as $imageUrl) {
                             if (empty($imageUrl)) continue;
@@ -100,11 +91,9 @@ class DatabaseSeeder
                         }
                     }
 
-                    // Insert attributes with attribute items
                     if (!empty($product['attributes'])) {
                         foreach ($product['attributes'] as $attribute) {
                             if (empty($attribute['name']) || empty($attribute['items'])) continue;
-                            // Insert top-level attribute
                             $attributeStmt = $db->prepare("
                                 INSERT IGNORE INTO attributes (product_id, name, type)
                                 VALUES (:product_id, :name, :type)
@@ -116,7 +105,6 @@ class DatabaseSeeder
                             ]);
                             $attributeId = $db->lastInsertId();
                             if (!$attributeId) {
-                                // Fetch existing attribute ID if not inserted
                                 $fetchStmt = $db->prepare("
                                     SELECT id FROM attributes WHERE product_id = :product_id AND name = :name
                                 ");
@@ -127,10 +115,9 @@ class DatabaseSeeder
                                 $attributeId = $fetchStmt->fetchColumn();
                             }
                             if (!$attributeId) {
-                                $this->logger->error("Error: Unable to find attribute ID for '{$attribute['name']}' on product ID: {$product['id']}");
+                                $this->logger->error("Unable to find attribute ID for '{$attribute['name']}' on product ID: {$product['id']}");
                                 continue;
                             }
-                            // Insert attribute items
                             $itemStmt = $db->prepare("
                                 INSERT INTO attribute_items (attribute_id, display_value, value)
                                 VALUES (:attribute_id, :display_value, :value)
@@ -145,16 +132,13 @@ class DatabaseSeeder
                                 $this->logger->info("Inserted attribute item: {$attribute['name']} -> {$item['value']} for product ID: {$product['id']}");
                             }
                         }
-                    } else {
-                        $this->logger->info("No attributes found for product ID: {$product['id']}");
                     }
                 } catch (\PDOException $e) {
                     $this->logger->error("Error inserting product ID {$product['id']}: {$e->getMessage()}");
                 }
             }
-        } else {
-            $this->logger->info("No products found in data.");
         }
+
         $this->logger->info("Database seeding completed successfully.");
     }
 }
